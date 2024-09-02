@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Face Battle Game</title>
+    <style>
+        /* Basic page styling */
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        /* Sun count display styling */
+        #sunCount {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            background-color: #FFD700;
+            padding: 5px;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        /* Game container layout */
+        #gameContainer {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        /* Plant selection area styling */
+        #plantSelection {
+            display: flex;
+            justify-content: space-around;
+            width: 100%;
+            margin-bottom: 20px;
+        }
+        .plantOption {
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .plantOption.selected {
+            border-color: #FF5722;
+            background-color: #FBE9E7;
+        }
+        /* Message display styling */
+        #message {
+            margin: 10px 0;
+            font-style: italic;
+        }
+        /* Game board styling */
+        #gameBoard {
+            display: flex;
+            flex-direction: column;
+            width: 900px;
+            height: 300px;
+            border: 2px solid #333;
+            background-color: #8FBC8F;
+            position: relative;
+        }
+        .lane {
+            height: 20%;
+            position: relative;
+            border-bottom: 1px solid #666;
+        }
+        .lane:last-child {
+            border-bottom: none;
+        }
+        /* Plant and zombie styling */
+        .plant, .zombie {
+            width: 40px;
+            height: 40px;
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            background-size: cover;
+            background-position: center;
+        }
+        /* House and zombie spawn area styling */
+        #house, #zombieSpawn {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 50px;
+            z-index: 10;
+        }
+        #house {
+            left: 0;
+            background-color: #8B4513;
+        }
+        #zombieSpawn {
+            right: 0;
+            background-color: #A52A2A;
+        }
+        /* Bonus sun styling */
+        #bonusSun {
+            width: 30px;
+            height: 30px;
+            position: absolute;
+            z-index: 20;
+            cursor: pointer;
+            display: none;
+            background-size: cover;
+            background-position: center;
+        }
+        /* Image upload area styling */
+        #imageUpload {
+            margin-bottom: 20px;
+        }
+        /* Life bar styling */
+        .life-bar {
+            position: absolute;
+            bottom: -12px; /* Increased space between image and life bar */
+            left: 0;
+            width: 100%;
+            height: 3px;
+            background-color: #ff0000;
+        }
+        .life-bar-inner {
+            height: 100%;
+            background-color: #00ff00;
+            transition: width 0.3s;
+        }
+    </style>
+</head>
+<body>
+    <div id="sunCount">Sun: 100</div>
+    <div id="gameContainer">
+        <h1>Face Battle Game</h1>
+        <div id="imageUpload">
+            <input type="file" id="plantImage1" accept="image/*">
+            <input type="file" id="plantImage2" accept="image/*">
+            <input type="file" id="plantImage3" accept="image/*">
+            <input type="file" id="zombieImage" accept="image/*">
+            <input type="file" id="sunImage" accept="image/*">
+        </div>
+        <div id="plantSelection">
+            <div class="plantOption" onclick="selectPlant('P1', 50, 100)">P1 (50 sun, 100 energy)</div>
+            <div class="plantOption" onclick="selectPlant('P2', 100, 150)">P2 (100 sun, 150 energy)</div>
+            <div class="plantOption" onclick="selectPlant('P3', 150, 200)">P3 (150 sun, 200 energy)</div>
+        </div>
+        <div id="message">Select a plant and click on a lane to place it.</div>
+        <button onclick="startGame()" id="startButton">Start Game</button>
+        <button onclick="togglePause()" id="pauseButton">Pause</button>
+        <div id="gameBoard">
+            <div id="house"></div>
+            <div id="zombieSpawn"></div>
+            <div class="lane" onclick="placePlant(event, 0)"></div>
+            <div class="lane" onclick="placePlant(event, 1)"></div>
+            <div class="lane" onclick="placePlant(event, 2)"></div>
+            <div class="lane" onclick="placePlant(event, 3)"></div>
+            <div class="lane" onclick="placePlant(event, 4)"></div>
+            <div id="bonusSun" onclick="collectBonusSun()"></div>
+        </div>
+    </div>
+
+    <script>
+        // Game state variables
+        let sunCount = 100;
+        let gameRunning = false;
+        let gamePaused = false;
+        let selectedPlant = null;
+        let zombieInterval;
+        let moveZombiesInterval;
+        let plants = [];
+        let zombies = [];
+        let zombiesKilled = 0;
+        let images = {
+            P1: null,
+            P2: null,
+            P3: null,
+            zombie: null,
+            sun: null
+        };
+
+        // Function to load custom images for plants, zombies, and sun
+        function loadImage(inputId, imageKey) {
+            const input = document.getElementById(inputId);
+            input.addEventListener('change', function(e) {
+                const file = e.target.files[0];
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    images[imageKey] = event.target.result;
+                };
+                reader.readAsDataURL(file);
+            });
+        }
+
+        // Load images for each element
+        loadImage('plantImage1', 'P1');
+        loadImage('plantImage2', 'P2');
+        loadImage('plantImage3', 'P3');
+        loadImage('zombieImage', 'zombie');
+        loadImage('sunImage', 'sun');
+
+        // Update the sun count display
+        function updateSunDisplay() {
+            document.getElementById('sunCount').textContent = `Sun: ${sunCount}`;
+        }
+
+        // Select a plant type
+        function selectPlant(type, cost, energy) {
+            if (!gameRunning || gamePaused) {
+                showMessage("The game is not running or is paused!");
+                return;
+            }
+            selectedPlant = { type, cost, energy };
+            showMessage(`Selected ${type}. Click on a lane to place it. Cost: ${cost} sun, Energy: ${energy}.`);
+            
+            // Update visual selection
+            document.querySelectorAll('.plantOption').forEach(option => {
+                option.classList.remove('selected');
+            });
+            event.target.classList.add('selected');
+        }
+
+        // Start the game
+        function startGame() {
+            if (gameRunning) return;
+            gameRunning = true;
+            gamePaused = false;
+            document.getElementById('startButton').disabled = true;
+            document.getElementById('pauseButton').textContent = "Pause";
+            showMessage("Game started! Select a plant and click on a lane to place it.");
+            startSunGeneration();
+            startZombieSpawning();
+        }
+
+        // Toggle pause state
+        function togglePause() {
+            if (!gameRunning) return;
+            gamePaused = !gamePaused;
+            document.getElementById('pauseButton').textContent = gamePaused ? "Resume" : "Pause";
+            showMessage(gamePaused ? "Game paused" : "Game resumed");
+        }
+
+        // Display a message to the user
+        function showMessage(text) {
+            document.getElementById('message').textContent = text;
+        }
+
+        // Place a plant on the game board
+        function placePlant(event, laneIndex) {
+            if (!gameRunning || gamePaused || !selectedPlant) {
+                showMessage("Cannot place plant now.");
+                return;
+            }
+            if (sunCount >= selectedPlant.cost) {
+                const lane = document.getElementsByClassName('lane')[laneIndex];
+                const rect = lane.getBoundingClientRect();
+                const x = event.clientX - rect.left;
+                
+                if (x < 50 || x > 650) return;  // Ensure click is within playable area
+
+                sunCount -= selectedPlant.cost;
+                updateSunDisplay();
+                const plant = document.createElement('div');
+                plant.className = `plant ${selectedPlant.type}`;
+                plant.style.left = `${x}px`;
+                plant.style.backgroundImage = `url(${images[selectedPlant.type]})`;
+                
+                // Add life bar
+                const lifeBar = document.createElement('div');
+                lifeBar.className = 'life-bar';
+                const lifeBarInner = document.createElement('div');
+                lifeBarInner.className = 'life-bar-inner';
+                lifeBarInner.style.width = '100%';
+                lifeBar.appendChild(lifeBarInner);
+                plant.appendChild(lifeBar);
+
+                lane.appendChild(plant);
+                plants.push({ 
+                    element: plant, 
+                    energy: selectedPlant.energy, 
+                    maxEnergy: selectedPlant.energy,
+                    lane: laneIndex, 
+                    position: x,
+                    lifeBar: lifeBarInner
+                });
+                showMessage(`Placed ${selectedPlant.type} in lane ${laneIndex + 1}! ${sunCount} sun remaining.`);
+            } else {
+                showMessage("Not enough sun!");
+            }
+        }
+
+        // Start generating sun
+        function startSunGeneration() {
+            setInterval(() => {
+                if (gameRunning && !gamePaused) {
+                    sunCount += 25;
+                    updateSunDisplay();
+                }
+            }, 10000); // Generate 25 sun every 10 seconds
+        }
+
+        // Start spawning zombies
+        function startZombieSpawning() {
+            zombieInterval = setInterval(() => {
+                if (!gameRunning || gamePaused) return;
+                const laneIndex = Math.floor(Math.random() * 5);
+                const lane = document.getElementsByClassName('lane')[laneIndex];
+                const zombie = document.createElement('div');
+                zombie.className = 'zombie';
+                zombie.style.right = '50px';
+                zombie.style.backgroundImage = `url(${images.zombie})`;
+
+                // Add life bar
+                const lifeBar = document.createElement('div');
+                lifeBar.className = 'life-bar';
+                const lifeBarInner = document.createElement('div');
+                lifeBarInner.className = 'life-bar-inner';
+                lifeBarInner.style.width = '100%';
+                lifeBar.appendChild(lifeBarInner);
+                zombie.appendChild(lifeBar);
+
+                lane.appendChild(zombie);
+
+                zombies.push({ 
+                    element: zombie, 
+                    energy: 100, 
+                    maxEnergy: 100,
+                    lane: laneIndex, 
+                    position: 650,
+                    lifeBar: lifeBarInner
+                });
+            }, 5000); // Spawn a zombie every 5 seconds
+
+            moveZombiesInterval = setInterval(moveZombies, 50);
+        }
+
+        // Move zombies and handle collisions
+        function moveZombies() {
+            if (!gameRunning || gamePaused) return;
+            zombies.forEach((zombie, index) => {
+                zombie.position -= 0.25;
+                zombie.element.style.right = `${700 - zombie.position}px`;
+
+                // Check for collisions with plants
+                const collidingPlant = plants.find(plant => 
+                    plant.lane === zombie.lane && 
+                    Math.abs(plant.position - zombie.position) < 40
+                );
+
+                if (collidingPlant) {
+                    // Combat logic
+                    zombie.energy -= 10;
+                    collidingPlant.energy -= 5;
+
+                    updateLifeBar(zombie);
+                    updateLifeBar(collidingPlant);
+
+                    if (zombie.energy <= 0) {
+                        zombie.element.remove();
+                        zombies.splice(index, 1);
+                        zombiesKilled++;
+                        if (zombiesKilled % 2 === 0) {
+                            spawnBonusSun();
+                        }
+                    }
+
+                    if (collidingPlant.energy <= 0) {
+                        collidingPlant.element.remove();
+                        plants = plants.filter(p => p !== collidingPlant);
+                    }
+                }
+
+                if (zombie.position <= 50) {
+                    endGame("Game Over! Zombies reached your house!");
+                }
+            });
+        }
+
+        // Update the life bar of a plant or zombie
+        function updateLifeBar(entity) {
+            const percentage = (entity.energy / entity.maxEnergy) * 100;
+            entity.lifeBar.style.width = `${percentage}%`;
+        }
+
+        // Spawn a bonus sun
+        function spawnBonusSun() {
+            const bonusSun = document.getElementById('bonusSun');
+            const x = Math.random() * (600 - 30) + 50;
+            const y = Math.random() * (300 - 30);
+            bonusSun.style.left = `${x}px`;
+            bonusSun.style.top = `${y}px`;
+            bonusSun.style.backgroundImage = `url(${images.sun})`;
+            bonusSun.style.display = 'block';
+            setTimeout(() => {
+                if (gameRunning && !gamePaused) {
+                    bonusSun.style.display = 'none';
+                }
+            }, 5000);
+        }
+
+        // Collect a bonus sun
+        function collectBonusSun() {
+            if (!gameRunning || gamePaused) return;
+            const bonusSun = document.getElementById('bonusSun');
+            sunCount += 50;
+            updateSunDisplay();
+            bonusSun.style.display = 'none';
+            showMessage("Collected 50 bonus sun!");
+        }
+
+        // End the game
+        function endGame(message) {
+            gameRunning = false;
+            clearInterval(zombieInterval);
+            clearInterval(moveZombiesInterval);
+            showMessage(message);
+            document.getElementById('startButton').disabled = false;
+            document.getElementById('pauseButton').textContent = "Pause";
+        }
+
+        // Initialize the sun display
+        updateSunDisplay();
+    </script>
+</body>
+</html>

@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <!-- ... [Previous HTML and CSS remains the same] ... -->
+</head>
+<body>
+    <!-- ... [Previous HTML body remains the same] ... -->
+
+    <script>
+        const gameContainer = document.getElementById('gameContainer');
+        const imageInput = document.getElementById('imageInput');
+        const loadImagesBtn = document.getElementById('loadImagesBtn');
+        const resetBtn = document.getElementById('resetBtn');
+        const timerDisplay = document.getElementById('timer');
+        const soundCheckbox = document.getElementById('soundCheckbox');
+        const flipSound = document.getElementById('flipSound');
+        const matchSound = document.getElementById('matchSound');
+        const pairCompleteSound = document.getElementById('pairCompleteSound');
+        const winSound = document.getElementById('winSound');
+        const playerNameInput = document.getElementById('playerName');
+        const startGameBtn = document.getElementById('startGameBtn');
+        const leaderboardBody = document.getElementById('leaderboardBody');
+        let flippedCards = [];
+        let matchedPairs = 0;
+        let images = [];
+        let timer;
+        let seconds = 0;
+        let gameStarted = false;
+        let leaderboard = [];
+
+        loadImagesBtn.addEventListener('click', () => {
+            imageInput.click();
+        });
+
+        imageInput.addEventListener('change', handleImageUpload);
+        resetBtn.addEventListener('click', resetGame);
+        startGameBtn.addEventListener('click', startGame);
+
+        function handleImageUpload(event) {
+            const files = event.target.files;
+            images = [];
+
+            if (files.length < 2) {
+                alert('Please select at least 2 images.');
+                return;
+            }
+
+            const maxImages = Math.min(files.length, 8);
+            let loadedImages = 0;
+
+            for (let i = 0; i < maxImages; i++) {
+                const file = files[i];
+                const reader = new FileReader();
+
+                reader.onload = (e) => {
+                    images.push(e.target.result);
+                    loadedImages++;
+                    if (loadedImages === maxImages) {
+                        alert(`${loadedImages} images loaded successfully!`);
+                        resetBtn.disabled = false;
+                    }
+                };
+
+                reader.readAsDataURL(file);
+            }
+        }
+
+        function createBoard() {
+            gameContainer.innerHTML = '';
+            matchedPairs = 0;
+            const shuffledImages = [...images, ...images].sort(() => Math.random() - 0.5);
+            
+            shuffledImages.forEach((image, index) => {
+                const card = document.createElement('div');
+                card.classList.add('card');
+                card.dataset.index = index;
+                card.addEventListener('click', flipCard);
+
+                const img = document.createElement('img');
+                img.src = image;
+                card.appendChild(img);
+
+                gameContainer.appendChild(card);
+            });
+
+            resetTimer();
+        }
+
+        function flipCard() {
+            if (!gameStarted) {
+                startTimer();
+                gameStarted = true;
+            }
+
+            if (flippedCards.length < 2 && !this.classList.contains('flipped')) {
+                this.classList.add('flipped');
+                flippedCards.push(this);
+                playSound(flipSound);
+
+                if (flippedCards.length === 2) {
+                    setTimeout(checkMatch, 500);
+                }
+            }
+        }
+
+        function checkMatch() {
+            const [card1, card2] = flippedCards;
+            if (card1.querySelector('img').src === card2.querySelector('img').src) {
+                matchedPairs++;
+                playSound(matchSound);
+                setTimeout(() => {
+                    card1.classList.add('matched');
+                    card2.classList.add('matched');
+                    playSound(pairCompleteSound);
+                }, 300);
+                if (matchedPairs === images.length) {
+                    stopTimer();
+                    setTimeout(() => {
+                        playSound(winSound);
+                        updateLeaderboard(playerNameInput.value, seconds);
+                        alert(`Congratulations, ${playerNameInput.value}! You won in ${seconds} seconds!`);
+                    }, 500);
+                }
+            } else {
+                setTimeout(() => {
+                    card1.classList.remove('flipped');
+                    card2.classList.remove('flipped');
+                }, 500);
+            }
+            flippedCards = [];
+        }
+
+        function resetGame() {
+            createBoard();
+            gameStarted = false;
+            resetTimer();
+        }
+
+        function startTimer() {
+            timer = setInterval(() => {
+                seconds++;
+                timerDisplay.textContent = `Time: ${seconds}s`;
+            }, 1000);
+        }
+
+        function stopTimer() {
+            clearInterval(timer);
+        }
+
+        function resetTimer() {
+            stopTimer();
+            seconds = 0;
+            timerDisplay.textContent = 'Time: 0s';
+        }
+
+        function playSound(sound) {
+            if (soundCheckbox.checked) {
+                sound.currentTime = 0;
+                sound.play();
+            }
+        }
+
+        function startGame() {
+            if (playerNameInput.value.trim() === '') {
+                alert('Please enter your name before starting the game.');
+                return;
+            }
+            if (images.length === 0) {
+                alert('Please load images before starting the game.');
+                return;
+            }
+            resetGame();
+        }
+
+        function updateLeaderboard(name, time) {
+            leaderboard.push({ name, time });
+            leaderboard.sort((a, b) => a.time - b.time);
+            leaderboard = leaderboard.slice(0, 10); // Keep only top 10 scores
+            displayLeaderboard();
+        }
+
+        function displayLeaderboard() {
+            leaderboardBody.innerHTML = '';
+            leaderboard.forEach((entry, index) => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${index + 1}</td>
+                    <td>${entry.name}</td>
+                    <td>${entry.time}s</td>
+                `;
+                leaderboardBody.appendChild(row);
+            });
+        }
+    </script>
+</body>
+</html>
