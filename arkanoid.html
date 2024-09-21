@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Arkanoid-style Game with Resized Image Blocks</title>
+    <style>
+        body { display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background-color: #f0f0f0; }
+        #gameContainer { display: flex; flex-direction: column; align-items: center; }
+        #controls { margin-bottom: 20px; }
+        .control-group { margin-bottom: 10px; }
+        #gameCanvas { border: 2px solid #000; }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <div id="controls">
+            <div class="control-group">
+                <label for="ballColor">Ball Color:</label>
+                <input type="color" id="ballColor" value="#0000FF">
+            </div>
+            <div class="control-group">
+                <label for="paddleColor">Paddle Color:</label>
+                <input type="color" id="paddleColor" value="#00FF00">
+            </div>
+            <div class="control-group">
+                <label for="ballImage">Ball Image:</label>
+                <input type="file" id="ballImage" accept="image/*">
+            </div>
+            <div class="control-group">
+                <label for="paddleImage">Paddle Image:</label>
+                <input type="file" id="paddleImage" accept="image/*">
+            </div>
+            <div class="control-group">
+                <label for="blockImage">Block Image:</label>
+                <input type="file" id="blockImage" accept="image/*">
+            </div>
+            <div class="control-group">
+                <button id="pauseResumeBtn">Pause</button>
+            </div>
+        </div>
+        <canvas id="gameCanvas" width="480" height="320"></canvas>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Game objects
+        let ball = { x: canvas.width / 2, y: canvas.height - 30, dx: 2, dy: -2, radius: 10 };
+        let paddle = { x: canvas.width / 2 - 40, y: canvas.height - 10, width: 80, height: 10 };
+        let blocks = [];
+        const blockRowCount = 5;
+        const blockColumnCount = 8;
+        const blockWidth = 50;
+        const blockHeight = 20;
+        const blockPadding = 10;
+        const blockOffsetTop = 30;
+        const blockOffsetLeft = 30;
+
+        // Customization variables
+        let ballColor = '#0000FF';
+        let paddleColor = '#00FF00';
+        let ballImage = null;
+        let paddleImage = null;
+        let blockImage = null;
+        let resizedBlockImage = null;
+
+        // Game state
+        let gameRunning = true;
+
+        // Event listeners for customization
+        document.getElementById('ballColor').addEventListener('input', (e) => ballColor = e.target.value);
+        document.getElementById('paddleColor').addEventListener('input', (e) => paddleColor = e.target.value);
+        document.getElementById('ballImage').addEventListener('change', loadBallImage);
+        document.getElementById('paddleImage').addEventListener('change', loadPaddleImage);
+        document.getElementById('blockImage').addEventListener('change', loadBlockImage);
+
+        // Pause/Resume button
+        const pauseResumeBtn = document.getElementById('pauseResumeBtn');
+        pauseResumeBtn.addEventListener('click', togglePauseResume);
+
+        function togglePauseResume() {
+            gameRunning = !gameRunning;
+            pauseResumeBtn.textContent = gameRunning ? 'Pause' : 'Resume';
+            if (gameRunning) {
+                requestAnimationFrame(draw);
+            }
+        }
+
+        // Initialize blocks
+        function initializeBlocks() {
+            for (let c = 0; c < blockColumnCount; c++) {
+                blocks[c] = [];
+                for (let r = 0; r < blockRowCount; r++) {
+                    blocks[c][r] = { 
+                        x: 0, 
+                        y: 0, 
+                        status: 1,
+                        sourceX: c * (blockWidth + blockPadding),
+                        sourceY: r * (blockHeight + blockPadding)
+                    };
+                }
+            }
+        }
+
+        initializeBlocks();
+
+        // Load custom images
+        function loadBallImage(e) {
+            const file = e.target.files[0];
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const img = new Image();
+                img.onload = function() {
+                    ballImage = img;
+                }
+                img.src = event.target.result;
+            }
+            reader.readAsDataURL(file);
+        }
+
+        function loadPaddleImage(e) {
+            const file = e.target.files[0];
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const img = new Image();
+                img.onload = function() {
+                    paddleImage = img;
+                }
+                img.src = event.target.result;
+            }
+            reader.readAsDataURL(file);
+        }
+
+        function loadBlockImage(e) {
+            const file = e.target.files[0];
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const img = new Image();
+                img.onload = function() {
+                    blockImage = img;
+                    resizeBlockImage();
+                    initializeBlocks(); // Reinitialize blocks when a new image is loaded
+                }
+                img.src = event.target.result;
+            }
+            reader.readAsDataURL(file);
+        }
+
+        function resizeBlockImage() {
+            const totalWidth = blockColumnCount * blockWidth + (blockColumnCount - 1) * blockPadding;
+            const totalHeight = blockRowCount * blockHeight + (blockRowCount - 1) * blockPadding;
+            
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = totalWidth;
+            tempCanvas.height = totalHeight;
+            const tempCtx = tempCanvas.getContext('2d');
+            
+            tempCtx.drawImage(blockImage, 0, 0, blockImage.width, blockImage.height, 0, 0, totalWidth, totalHeight);
+            
+            resizedBlockImage = tempCanvas;
+        }
+
+        // Draw game objects
+        function drawBall() {
+            ctx.beginPath();
+            ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+            if (ballImage) {
+                ctx.save();
+                ctx.clip();
+                ctx.drawImage(ballImage, ball.x - ball.radius, ball.y - ball.radius, ball.radius * 2, ball.radius * 2);
+                ctx.restore();
+            } else {
+                ctx.fillStyle = ballColor;
+                ctx.fill();
+            }
+            ctx.closePath();
+        }
+
+        function drawPaddle() {
+            ctx.beginPath();
+            ctx.rect(paddle.x, paddle.y, paddle.width, paddle.height);
+            if (paddleImage) {
+                ctx.save();
+                ctx.clip();
+                ctx.drawImage(paddleImage, paddle.x, paddle.y, paddle.width, paddle.height);
+                ctx.restore();
+            } else {
+                ctx.fillStyle = paddleColor;
+                ctx.fill();
+            }
+            ctx.closePath();
+        }
+
+        function drawBlocks() {
+            for (let c = 0; c < blockColumnCount; c++) {
+                for (let r = 0; r < blockRowCount; r++) {
+                    if (blocks[c][r].status == 1) {
+                        const blockX = (c * (blockWidth + blockPadding)) + blockOffsetLeft;
+                        const blockY = (r * (blockHeight + blockPadding)) + blockOffsetTop;
+                        blocks[c][r].x = blockX;
+                        blocks[c][r].y = blockY;
+                        ctx.beginPath();
+                        ctx.rect(blockX, blockY, blockWidth, blockHeight);
+                        if (resizedBlockImage) {
+                            ctx.save();
+                            ctx.clip();
+                            ctx.drawImage(
+                                resizedBlockImage,
+                                blocks[c][r].sourceX, blocks[c][r].sourceY,
+                                blockWidth, blockHeight,
+                                blockX, blockY,
+                                blockWidth, blockHeight
+                            );
+                            ctx.restore();
+                        } else {
+                            ctx.fillStyle = "#0095DD";
+                            ctx.fill();
+                        }
+                        ctx.closePath();
+                    }
+                }
+            }
+        }
+
+        // Collision detection
+        function collisionDetection() {
+            for (let c = 0; c < blockColumnCount; c++) {
+                for (let r = 0; r < blockRowCount; r++) {
+                    const b = blocks[c][r];
+                    if (b.status == 1) {
+                        if (ball.x > b.x && ball.x < b.x + blockWidth && ball.y > b.y && ball.y < b.y + blockHeight) {
+                            ball.dy = -ball.dy;
+                            b.status = 0;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Game loop
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawBlocks();
+            drawBall();
+            drawPaddle();
+            collisionDetection();
+
+            if (gameRunning) {
+                // Ball movement and collision with walls
+                if (ball.x + ball.dx > canvas.width - ball.radius || ball.x + ball.dx < ball.radius) {
+                    ball.dx = -ball.dx;
+                }
+                if (ball.y + ball.dy < ball.radius) {
+                    ball.dy = -ball.dy;
+                } else if (ball.y + ball.dy > canvas.height - ball.radius) {
+                    if (ball.x > paddle.x && ball.x < paddle.x + paddle.width) {
+                        ball.dy = -ball.dy;
+                    } else {
+                        // Game over logic could be added here
+                        ball.x = canvas.width / 2;
+                        ball.y = canvas.height - 30;
+                        ball.dx = 2;
+                        ball.dy = -2;
+                        initializeBlocks(); // Reset blocks when ball is reset
+                    }
+                }
+
+                // Paddle movement
+                if (rightPressed && paddle.x < canvas.width - paddle.width) {
+                    paddle.x += 7;
+                } else if (leftPressed && paddle.x > 0) {
+                    paddle.x -= 7;
+                }
+
+                ball.x += ball.dx;
+                ball.y += ball.dy;
+            }
+
+            requestAnimationFrame(draw);
+        }
+
+        // Keyboard controls
+        let rightPressed = false;
+        let leftPressed = false;
+
+        document.addEventListener("keydown", keyDownHandler, false);
+        document.addEventListener("keyup", keyUpHandler, false);
+
+        function keyDownHandler(e) {
+            if (e.key == "Right" || e.key == "ArrowRight") {
+                rightPressed = true;
+            } else if (e.key == "Left" || e.key == "ArrowLeft") {
+                leftPressed = true;
+            }
+        }
+
+        function keyUpHandler(e) {
+            if (e.key == "Right" || e.key == "ArrowRight") {
+                rightPressed = false;
+            } else if (e.key == "Left" || e.key == "ArrowLeft") {
+                leftPressed = false;
+            }
+        }
+
+        // Start the game
+        draw();
+    </script>
+</body>
+</html>
